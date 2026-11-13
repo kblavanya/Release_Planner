@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - JIRA Release Planning Tool{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </h1>
+            <a href="{{ url_for('releases_page') }}" class="btn btn-primary">
+                <i class="bi bi-calendar-check"></i> View All Releases
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Connection Info Card -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h5 class="card-title mb-1">
+                            <i class="bi bi-server"></i> JIRA Connection
+                        </h5>
+                        <p class="card-text" id="connectionInfo">
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            Checking connection...
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <button class="btn btn-light btn-sm" onclick="checkConnection()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="bi bi-calendar-check display-4 text-primary"></i>
+                <h5 class="card-title mt-2" id="totalReleases">-</h5>
+                <p class="card-text text-muted">Total Releases</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="bi bi-check-circle display-4 text-success"></i>
+                <h5 class="card-title mt-2" id="releasedCount">-</h5>
+                <p class="card-text text-muted">Released</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="bi bi-clock display-4 text-warning"></i>
+                <h5 class="card-title mt-2" id="unreleasedCount">-</h5>
+                <p class="card-text text-muted">Unreleased</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="bi bi-archive display-4 text-secondary"></i>
+                <h5 class="card-title mt-2" id="archivedCount">-</h5>
+                <p class="card-text text-muted">Archived</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Releases -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-calendar2-event"></i> Recent Releases
+                </h5>
+                <a href="{{ url_for('releases_page') }}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="recentReleases">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading releases...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboardData() {
+    try {
+        // Load connection info
+        const connectionResponse = await fetch('/api/connection-status');
+        const connectionData = await connectionResponse.json();
+        
+        const connectionInfo = document.getElementById('connectionInfo');
+        if (connectionData.connected) {
+            connectionInfo.innerHTML = `
+                <i class="bi bi-check-circle text-success me-2"></i>
+                Connected to <strong>${connectionData.server}</strong><br>
+                <small>Version: ${connectionData.version} | User: ${connectionData.user}</small>
+            `;
+        } else {
+            connectionInfo.innerHTML = `
+                <i class="bi bi-x-circle text-danger me-2"></i>
+                Connection failed: ${connectionData.error}
+            `;
+        }
+
+        // Load releases
+        const releasesResponse = await fetch('/api/releases');
+        const releases = await releasesResponse.json();
+        
+        if (Array.isArray(releases)) {
+            // Update stats
+            const totalReleases = releases.length;
+            const releasedCount = releases.filter(r => r.released).length;
+            const unreleasedCount = releases.filter(r => !r.released && !r.archived).length;
+            const archivedCount = releases.filter(r => r.archived).length;
+            
+            document.getElementById('totalReleases').textContent = totalReleases;
+            document.getElementById('releasedCount').textContent = releasedCount;
+            document.getElementById('unreleasedCount').textContent = unreleasedCount;
+            document.getElementById('archivedCount').textContent = archivedCount;
+            
+            // Show recent releases (top 10)
+            const recentReleases = releases.slice(0, 10);
+            const recentReleasesDiv = document.getElementById('recentReleases');
+            
+            if (recentReleases.length > 0) {
+                recentReleasesDiv.innerHTML = recentReleases.map(release => `
+                    <div class="row mb-3 release-card ${release.released ? 'release-released' : (release.archived ? 'release-archived' : 'release-unreleased')}">
+                        <div class="col">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <h6 class="card-title mb-1">
+                                                <a href="/releases/${encodeURIComponent(release.name)}" 
+                                                   class="text-decoration-none">
+                                                    ${release.name}
+                                                </a>
+                                            </h6>
+                                            <p class="card-text text-muted small mb-2">
+                                                ${release.description || 'No description'}
+                                            </p>
+                                            <div class="d-flex align-items-center">
+                                                <span class="badge bg-${release.released ? 'success' : (release.archived ? 'secondary' : 'warning')} me-2">
+                                                    ${release.released ? 'Released' : (release.archived ? 'Archived' : 'Unreleased')}
+                                                </span>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-calendar3"></i>
+                                                    ${formatDate(release.releaseDate)}
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div class="text-end">
+                                            <a href="/releases/${encodeURIComponent(release.name)}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                recentReleasesDiv.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="bi bi-calendar-x display-4 text-muted"></i>
+                        <p class="mt-2 text-muted">No releases found</p>
+                    </div>
+                `;
+            }
+        } else {
+            document.getElementById('recentReleases').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Error loading releases: ${releases.error || 'Unknown error'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        document.getElementById('recentReleases').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i>
+                Error loading data: ${error.message}
+            </div>
+        `;
+    }
+}
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', loadDashboardData);
+</script>
+{% endblock %}

@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}JIRA Configuration - Release Planner{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg mt-5">
+                <div class="card-header bg-primary text-white text-center">
+                    <h3 class="mb-0">
+                        <i class="bi bi-gear"></i> JIRA Configuration
+                    </h3>
+                    <p class="mb-0 mt-2">Welcome to Release Planner! Let's connect to your JIRA instance.</p>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Connection Status -->
+                    <div id="connectionStatus" class="alert d-none" role="alert">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status" id="loadingSpinner" style="display: none;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span id="statusMessage"></span>
+                        </div>
+                    </div>
+
+                    <!-- Configuration Form -->
+                    <form id="configForm">
+                        <div class="mb-3">
+                            <label for="jiraUrl" class="form-label">
+                                <i class="bi bi-link-45deg"></i> JIRA Server URL
+                            </label>
+                            <input type="url" class="form-control" id="jiraUrl" name="jiraUrl" 
+                                   placeholder="https://yourcompany.atlassian.net" 
+                                   value="" required>
+                            <div class="form-text">Enter your JIRA instance URL (include https://)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="jiraEmail" class="form-label">
+                                <i class="bi bi-envelope"></i> Email Address
+                            </label>
+                            <input type="email" class="form-control" id="jiraEmail" name="jiraEmail" 
+                                   placeholder="your.email@company.com" 
+                                   value="" required>
+                            <div class="form-text">Your JIRA account email address</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="jiraToken" class="form-label">
+                                <i class="bi bi-key"></i> API Token
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="jiraToken" name="jiraToken" 
+                                       placeholder="Enter your JIRA API token" 
+                                       value="" required>
+                                <button class="btn btn-outline-secondary" type="button" id="toggleToken">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" class="text-decoration-none">
+                                    <i class="bi bi-question-circle"></i> How to create an API token
+                                </a>
+                            </div>
+                        </div>
+
+
+
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-primary" id="testConnection">
+                                <i class="bi bi-wifi"></i> Test Connection
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="saveConfig" disabled>
+                                <i class="bi bi-check-lg"></i> Save & Continue
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Help Section -->
+                    <div class="mt-4 p-3 bg-light rounded">
+                        <h6><i class="bi bi-info-circle"></i> Need Help?</h6>
+                        <ul class="mb-0 small">
+                            <li>JIRA URL format: <code>https://yourcompany.atlassian.net</code></li>
+                            <li>Use your regular JIRA login email address</li>
+                            <li>API tokens are more secure than passwords</li>
+                            <li>You can select projects from the dashboard after setup</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('configForm');
+    const testBtn = document.getElementById('testConnection');
+    const saveBtn = document.getElementById('saveConfig');
+    const statusDiv = document.getElementById('connectionStatus');
+    const statusMsg = document.getElementById('statusMessage');
+    const spinner = document.getElementById('loadingSpinner');
+    const toggleBtn = document.getElementById('toggleToken');
+    const tokenInput = document.getElementById('jiraToken');
+
+    let connectionTested = false;
+
+    // Toggle password visibility
+    toggleBtn.addEventListener('click', function() {
+        const type = tokenInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        tokenInput.setAttribute('type', type);
+        toggleBtn.innerHTML = type === 'password' ? '<i class="bi bi-eye"></i>' : '<i class="bi bi-eye-slash"></i>';
+    });
+
+    // Test connection
+    testBtn.addEventListener('click', async function() {
+        const formData = new FormData(form);
+        const config = {
+            jira_url: formData.get('jiraUrl'),
+            jira_email: formData.get('jiraEmail'),
+            jira_token: formData.get('jiraToken')
+        };
+
+        // Validate required fields
+        if (!config.jira_url || !config.jira_email || !config.jira_token) {
+            showStatus('Please fill in all required fields', 'warning');
+            return;
+        }
+
+        showStatus('Testing connection...', 'info', true);
+        testBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/config/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config)
+            });
+
+            console.log('DEBUG: Response status:', response.status);
+            console.log('DEBUG: Response ok:', response.ok);
+            
+            const result = await response.json();
+            console.log('DEBUG: Response result:', result);
+            console.log('DEBUG: result.success =', result.success);
+            console.log('DEBUG: response.ok =', response.ok);
+            console.log('DEBUG: condition check =', response.ok && result.success);
+
+            if (response.ok && result.success) {
+                console.log('DEBUG: Inside success block');
+                const serverUrl = result.server_info ? result.server_info.baseUrl : 'Unknown';
+                console.log('DEBUG: Server URL:', serverUrl);
+                console.log('DEBUG: About to call showStatus');
+                showStatus(`✅ Connected successfully! Server: ${serverUrl}`, 'success');
+                connectionTested = true;
+                saveBtn.disabled = false;
+                
+                // Update connection status badge to show test success
+                updateConnectionStatusBadge('test-success', 'Test Successful');
+            } else {
+                console.log('DEBUG: Inside failure block');
+                console.error('Connection test failed:', result);
+                showStatus(`❌ Connection failed: ${result.error || 'Unknown error'}`, 'danger');
+                connectionTested = false;
+                saveBtn.disabled = true;
+                
+                // Update connection status badge to show test failure
+                updateConnectionStatusBadge('disconnected', 'Test Failed');
+            }
+        } catch (error) {
+            showStatus(`❌ Connection error: ${error.message}`, 'danger');
+            connectionTested = false;
+            saveBtn.disabled = true;
+            
+            // Update connection status badge to show error
+            updateConnectionStatusBadge('error', 'Connection Error');
+        } finally {
+            testBtn.disabled = false;
+        }
+    });
+
+    // Save configuration
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        if (!connectionTested) {
+            showStatus('Please test the connection first', 'warning');
+            return;
+        }
+
+        const formData = new FormData(form);
+        const config = {
+            jira_url: formData.get('jiraUrl'),
+            jira_email: formData.get('jiraEmail'),
+            jira_token: formData.get('jiraToken')
+        };
+
+        showStatus('Saving configuration...', 'info', true);
+        saveBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/config/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                showStatus('✅ Configuration saved successfully! Redirecting...', 'success');
+                
+                // Update connection status badge to show fully connected
+                updateConnectionStatusBadge('connected', 'Connected');
+                
+                setTimeout(() => {
+                    window.location.href = '/releases';
+                }, 2000);
+            } else {
+                showStatus(`❌ Save failed: ${result.error || 'Unknown error'}`, 'danger');
+                saveBtn.disabled = false;
+            }
+        } catch (error) {
+            showStatus(`❌ Save error: ${error.message}`, 'danger');
+            saveBtn.disabled = false;
+        }
+    });
+
+    function showStatus(message, type, loading = false) {
+        console.log('DEBUG: showStatus called with:', message, type, loading);
+        console.log('DEBUG: statusMsg element:', statusMsg);
+        console.log('DEBUG: statusDiv element:', statusDiv);
+        
+        statusMsg.textContent = message;
+        statusDiv.className = `alert alert-${type}`;
+        statusDiv.classList.remove('d-none');
+        
+        console.log('DEBUG: statusDiv classes after update:', statusDiv.className);
+        
+        if (loading) {
+            spinner.style.display = 'inline-block';
+        } else {
+            spinner.style.display = 'none';
+        }
+    }
+
+    // Function to update the connection status badge in the top-right corner
+    function updateConnectionStatusBadge(status, text) {
+        try {
+            const statusIcon = document.getElementById('statusIcon');
+            const statusText = document.getElementById('statusText');
+            const statusBadge = statusIcon ? statusIcon.parentElement : null;
+            
+            if (statusIcon && statusText && statusBadge) {
+                switch (status) {
+                    case 'test-success':
+                        statusIcon.className = 'bi bi-check-circle me-1';
+                        statusText.textContent = text || 'Test OK';
+                        statusBadge.className = 'badge bg-info';
+                        
+                        // Prevent automatic check from overriding for 60 seconds
+                        if (window.setManualStatusOverride) {
+                            window.setManualStatusOverride('Test Successful', 60000);
+                        }
+                        break;
+                    case 'connected':
+                        statusIcon.className = 'bi bi-check-circle me-1';
+                        statusText.textContent = text || 'Connected';
+                        statusBadge.className = 'badge bg-success';
+                        
+                        // Clear any manual override since we're now fully connected
+                        if (window.setManualStatusOverride) {
+                            window.setManualStatusOverride(null, 0);
+                        }
+                        break;
+                    case 'disconnected':
+                        statusIcon.className = 'bi bi-x-circle me-1';
+                        statusText.textContent = text || 'Disconnected';
+                        statusBadge.className = 'badge bg-danger';
+                        break;
+                    case 'error':
+                        statusIcon.className = 'bi bi-exclamation-triangle me-1';
+                        statusText.textContent = text || 'Error';
+                        statusBadge.className = 'badge bg-warning';
+                        break;
+                }
+                console.log(`🔧 Updated connection status badge: ${status} - ${text}`);
+            } else {
+                console.warn('⚠️ Connection status badge elements not found');
+            }
+        } catch (error) {
+            console.error('❌ Error updating connection status badge:', error);
+        }
+    }
+
+    // Auto-test connection if all fields are filled
+    if (document.getElementById('jiraUrl').value && 
+        document.getElementById('jiraEmail').value && 
+        document.getElementById('jiraToken').value) {
+        testBtn.click();
+    }
+});
+</script>
+{% endblock %}

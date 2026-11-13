@@ -1,0 +1,1748 @@
+{% extends "base.html" %}
+
+{% block title %}Releases - JIRA Release Planning Tool{% endblock %}
+
+{% block content %}
+<style>
+/* Fix for Select2 release name truncation */
+.select2-selection__choice {
+    max-width: none !important;
+    white-space: nowrap !important;
+}
+
+.select2-selection__choice__display {
+    max-width: none !important;
+    overflow: visible !important;
+    text-overflow: none !important;
+}
+
+.select2-selection--multiple .select2-selection__rendered {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    overflow: visible !important;
+}
+
+.select2-selection--multiple {
+    min-height: auto !important;
+    overflow: visible !important;
+}
+</style>
+
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2">
+                <i class="bi bi-calendar-check"></i> All Releases
+            </h1>
+            <div>
+                <button class="btn btn-outline-secondary me-2" onclick="loadReleases()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <!-- First Row: Main Filters -->
+                <div class="row align-items-end mb-3">
+                    <div class="col-md-4">
+                        <label for="projectSelect" class="form-label">
+                            <i class="bi bi-folder"></i> Select Projects <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="projectSelect" multiple="multiple" required>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                        <div class="invalid-feedback" id="projectError" style="display: none;">
+                            Please select at least one project
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="releaseSelect" class="form-label">Select Releases</label>
+                        <select class="form-select" id="releaseSelect" multiple="multiple">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="labelsSelect" class="form-label">
+                            <i class="bi bi-tags"></i> Labels
+                        </label>
+                        <select class="form-select" id="labelsSelect" multiple="multiple">
+                            <option value="2025MayRelease1">2025MayRelease1</option>
+                            <option value="2025MayRelease2">2025MayRelease2</option>
+                            <option value="2025JunRelease1">2025JunRelease1</option>
+                            <option value="2025JunRelease2">2025JunRelease2</option>
+                            <option value="2025JulRelease1">2025JulRelease1</option>
+                            <option value="2025JulRelease2">2025JulRelease2</option>
+                            <option value="2025AugRelease1">2025AugRelease1</option>
+                            <option value="2025AugRelease2">2025AugRelease2</option>
+                            <option value="2025SepRelease1">2025SepRelease1</option>
+                            <option value="2025SepRelease2">2025SepRelease2</option>
+                            <option value="2025OctRelease1">2025OctRelease1</option>
+                            <option value="2025OctRelease2">2025OctRelease2</option>
+                            <option value="2025NovRelease1">2025NovRelease1</option>
+                            <option value="2025NovRelease2">2025NovRelease2</option>
+                            <option value="2025DecRelease1">2025DecRelease1</option>
+                            <option value="2025DecRelease2">2025DecRelease2</option>
+                            <option value="2026JanRelease1">2026JanRelease1</option>
+                            <option value="2026JanRelease2">2026JanRelease2</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Second Row: Team, Status, Sort, and Actions -->
+                <div class="row align-items-end">
+                    <div class="col-md-3">
+                        <label for="teamFilter" class="form-label">
+                            <i class="bi bi-people"></i> Team
+                        </label>
+                        <select class="form-select" id="teamFilter">
+                            <option value="">All Teams</option>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="statusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="statusFilter" onchange="filterReleases()">
+                            <option value="">All</option>
+                            <option value="released">Released</option>
+                            <option value="unreleased">Unreleased</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="sortBy" class="form-label">Sort By</label>
+                        <select class="form-select" id="sortBy" onchange="sortReleases()">
+                            <option value="date-desc">Date ↓</option>
+                            <option value="date-asc">Date ↑</option>
+                            <option value="name-asc">Name ↑</option>
+                            <option value="name-desc">Name ↓</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5 text-end">
+                        <button class="btn btn-outline-secondary me-2" onclick="clearFilters()">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </button>
+                        <button class="btn btn-primary" onclick="viewSelectedReleases()">
+                            <i class="bi bi-eye"></i> View Selected
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Releases List -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span id="releaseCount">0</span> Releases
+                    <span id="selectedCount" class="badge bg-primary ms-2" style="display: none;">0 selected</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="releasesList">
+                    <div class="text-center py-5">
+                        <i class="bi bi-funnel text-muted" style="font-size: 3rem;"></i>
+                        <h5 class="mt-3 text-muted">Select Projects or Releases to View Data</h5>
+                        <p class="text-muted">Use the filters above to select projects and releases you want to view.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tickets from Selected Releases -->
+<div class="row mt-4" id="selectedTicketsSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-task"></i> Tickets from Selected Releases
+                    <span id="ticketCount" class="badge bg-info ms-2">0 tickets</span>
+                </h5>
+                <div>
+                    <button class="btn btn-outline-success btn-sm me-2" onclick="exportSelectedTickets()">
+                        <i class="bi bi-download"></i> Export CSV
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="hideTicketsView()">
+                        <i class="bi bi-x"></i> Hide
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="selectedTicketsList">
+                    <!-- Tickets will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allReleases = [];
+let filteredReleases = [];
+
+async function loadReleasesForFilters(selectedProjects = []) {
+    try {
+        console.log('Loading releases for filters...', selectedProjects);
+        
+        // Build API URL with project filters
+        let apiUrl = '/api/releases';
+        const timestamp = new Date().getTime();
+        const params = new URLSearchParams({
+            t: timestamp,
+            bust: Math.random()
+        });
+        
+        // Add project filter if projects are selected
+        if (selectedProjects.length > 0) {
+            params.append('project', selectedProjects.join(','));
+        }
+        
+        const response = await fetch(`${apiUrl}?${params}`, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Loaded releases for filters:', data.length);
+        
+        if (Array.isArray(data)) {
+            allReleases = data;
+            
+            // Populate the multiselect dropdown only
+            populateReleaseSelect();
+            
+            console.log('Release filters populated');
+        } else {
+            console.error('Error loading releases:', data.error || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Error loading releases for filters:', error);
+    }
+}
+
+async function loadReleases() {
+    try {
+        console.log('Loading releases...');
+        
+        // Show loading state
+        const releasesList = document.getElementById('releasesList');
+        releasesList.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading releases...</p></div>';
+        
+        // If releases not loaded yet, load them
+        if (allReleases.length === 0) {
+            await loadReleasesForFilters();
+        }
+        
+        // Check if we have any releases to display
+        if (allReleases.length === 0) {
+            const selectedProjects = $('#projectSelect').val() || [];
+            const projectText = selectedProjects.length > 0 ? ` for project(s): ${selectedProjects.join(', ')}` : '';
+            releasesList.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="bi bi-exclamation-circle text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 text-muted">No Releases Found</h5>
+                    <p class="text-muted">No releases found${projectText}. Try selecting different projects or check your filters.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Add default stats for immediate display
+        const releasesWithDefaults = allReleases.map(release => ({
+            ...release,
+            ticketCount: 0,
+            totalStoryPoints: 0,
+            statsLoaded: false
+        }));
+        
+        filteredReleases = [...allReleases];
+        
+        console.log('Processed releases:', allReleases.length);
+        
+        // Initialize display
+        updateSelectedCount();
+        sortReleases();
+        displayReleases();
+    } catch (error) {
+        console.error('Error loading releases:', error);
+        document.getElementById('releasesList').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i>
+                Error loading releases: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function showInitialMessage() {
+    const releasesList = document.getElementById('releasesList');
+    releasesList.innerHTML = `
+        <div class="text-center py-5">
+            <i class="bi bi-funnel text-muted" style="font-size: 3rem;"></i>
+            <h5 class="mt-3 text-muted">Select Projects or Releases to View Data</h5>
+            <p class="text-muted">Use the filters above to select projects and releases you want to view.</p>
+        </div>
+    `;
+    
+    // Update count display
+    document.getElementById('releaseCount').textContent = '0';
+    const selectedCount = document.getElementById('selectedCount');
+    if (selectedCount) {
+        selectedCount.style.display = 'none';
+    }
+}
+
+function populateReleaseSelect() {
+    // Check if jQuery and Select2 are available
+    if (typeof $ === 'undefined' || !$.fn.select2) {
+        console.warn('jQuery or Select2 not available, using basic multiselect');
+        populateBasicReleaseSelect();
+        return;
+    }
+    
+    const releaseSelect = $('#releaseSelect'); // Using jQuery for Select2
+    releaseSelect.empty(); // Clear existing options
+    
+    // Add options for each release
+    allReleases.forEach(release => {
+        const displayText = `${release.name} (${release.released ? 'Released' : 'Unreleased'})`;
+        const option = new Option(
+            displayText,
+            release.name,
+            false,
+            false
+        );
+        // Add title attribute for tooltip
+        option.title = displayText;
+        releaseSelect.append(option);
+    });
+    
+    // Initialize or refresh Select2 (matching Project dropdown configuration)
+    releaseSelect.select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Search and select releases...',
+        allowClear: true,
+        closeOnSelect: false,
+        width: '100%',
+        dropdownParent: releaseSelect.parent(),
+        templateResult: formatReleaseOption,
+        templateSelection: formatReleaseSelection
+    });
+    
+    // Add event listener for selection changes
+    releaseSelect.on('change', function() {
+        const selectedReleases = $(this).val() || [];
+        console.log('Selected releases:', selectedReleases);
+        
+        // Filter releases when releases are selected
+        if (selectedReleases.length > 0) {
+            updateSelectedCount();
+            filterReleases(); // Only filter, don't reload all releases
+        } else {
+            // Show all releases when no specific releases are selected
+            const selectedProjects = $('#projectSelect').val() || [];
+            if (selectedProjects.length === 0) {
+                showInitialMessage();
+            } else {
+                // Show all releases for the selected projects
+                filterReleases();
+            }
+        }
+        
+        // Reload stats for visible releases when release selection changes
+        setTimeout(() => {
+            refreshVisibleReleaseStats();
+        }, 100);
+    });
+}
+
+function populateBasicReleaseSelect() {
+    // Fallback for when Select2 is not available
+    const releaseSelect = document.getElementById('releaseSelect');
+    releaseSelect.innerHTML = '';
+    
+    // Add options for each release
+    allReleases.forEach(release => {
+        const option = document.createElement('option');
+        option.value = release.name;
+        option.textContent = `${release.name} (${release.released ? 'Released' : 'Unreleased'})`;
+        releaseSelect.appendChild(option);
+    });
+    
+    // Add event listener for selection changes
+    releaseSelect.addEventListener('change', function() {
+        const selectedReleases = Array.from(this.selectedOptions).map(option => option.value);
+        console.log('Selected releases:', selectedReleases);
+        
+        // Filter releases when releases are selected
+        if (selectedReleases.length > 0) {
+            updateSelectedCount();
+            filterReleases(); // Only filter, don't reload all releases
+        } else {
+            // Show all releases when no specific releases are selected
+            const projectSelect = document.getElementById('projectSelect');
+            const selectedProjects = Array.from(projectSelect.selectedOptions).map(option => option.value);
+            if (selectedProjects.length === 0) {
+                showInitialMessage();
+            } else {
+                // Show all releases for the selected projects
+                filterReleases();
+            }
+        }
+    });
+}
+
+function formatReleaseOption(release) {
+    if (release.loading) {
+        return release.text;
+    }
+    
+    // Find the release data to get status info
+    const releaseData = allReleases.find(r => r.name === release.id);
+    if (!releaseData) return release.text;
+    
+    const statusClass = releaseData.released ? 'success' : 'warning';
+    const statusText = releaseData.released ? 'Released' : 'Unreleased';
+    
+    return $(`
+        <div class="d-flex justify-content-between align-items-center">
+            <span>${releaseData.name}</span>
+            <span class="badge bg-${statusClass} ms-2">${statusText}</span>
+        </div>
+    `);
+}
+
+function formatReleaseSelection(release) {
+    const text = release.text || release.id;
+    
+    // Create a span with full text in title for tooltip
+    return $(`<span title="${text}">${text}</span>`);
+}
+
+function filterBySelection() {
+    const selectedReleases = $('#releaseSelect').val() || []; // Using jQuery for Select2
+    
+    if (selectedReleases.length === 0) {
+        // If nothing selected, show all releases
+        filteredReleases = [...allReleases];
+    } else {
+        // Filter to only selected releases
+        filteredReleases = allReleases.filter(release => 
+            selectedReleases.includes(release.name)
+        );
+    }
+    
+    // Apply other filters too
+    filterReleases();
+}
+
+function updateSelectedCount() {
+    let selectedReleases;
+    
+    // Try jQuery/Select2 first, fallback to vanilla JS
+    if (typeof $ !== 'undefined' && $('#releaseSelect').length) {
+        selectedReleases = $('#releaseSelect').val() || [];
+    } else {
+        selectedReleases = Array.from(document.getElementById('releaseSelect').selectedOptions)
+                                .map(option => option.value);
+    }
+    
+    const selectedCountBadge = document.getElementById('selectedCount');
+    
+    if (selectedReleases.length > 0) {
+        selectedCountBadge.textContent = `${selectedReleases.length} selected`;
+        selectedCountBadge.style.display = 'inline';
+    } else {
+        selectedCountBadge.style.display = 'none';
+    }
+}
+
+function filterReleases() {
+    const statusFilter = document.getElementById('statusFilter').value;
+    let selectedReleases;
+    
+    // Try jQuery/Select2 first, fallback to vanilla JS
+    if (typeof $ !== 'undefined' && $('#releaseSelect').length) {
+        selectedReleases = $('#releaseSelect').val() || [];
+    } else {
+        selectedReleases = Array.from(document.getElementById('releaseSelect').selectedOptions)
+                                .map(option => option.value);
+    }
+    
+    // Start with selected releases or all releases
+    let baseReleases = selectedReleases.length > 0 
+        ? allReleases.filter(r => selectedReleases.includes(r.name))
+        : allReleases;
+    
+    filteredReleases = baseReleases.filter(release => {
+        // Status filter
+        let matchesStatus = true;
+        if (statusFilter) {
+            if (statusFilter === 'released') {
+                matchesStatus = release.released;
+            } else if (statusFilter === 'unreleased') {
+                matchesStatus = !release.released;
+            }
+        }
+        
+        return matchesStatus;
+    });
+    
+    updateSelectedCount();
+    sortReleases();
+    displayReleases();
+}
+
+function sortReleases() {
+    const sortBy = document.getElementById('sortBy').value;
+    
+    filteredReleases.sort((a, b) => {
+        switch (sortBy) {
+            case 'date-desc':
+                return new Date(b.releaseDate || '1900-01-01') - new Date(a.releaseDate || '1900-01-01');
+            case 'date-asc':
+                return new Date(a.releaseDate || '9999-12-31') - new Date(b.releaseDate || '9999-12-31');
+            case 'name-asc':
+                return a.name.localeCompare(b.name);
+            case 'name-desc':
+                return b.name.localeCompare(a.name);
+            default:
+                return 0;
+        }
+    });
+    
+    displayReleases();
+}
+
+function displayReleases() {
+    console.log('🎭 displayReleases() called');
+    console.log('Displaying releases:', filteredReleases.length);
+    if (filteredReleases.length > 0) {
+        console.log('Sample release data:', filteredReleases[0]);
+    }
+    
+    const releasesList = document.getElementById('releasesList');
+    const releaseCount = document.getElementById('releaseCount');
+    
+    releaseCount.textContent = filteredReleases.length;
+    
+    if (filteredReleases.length === 0) {
+        releasesList.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-search display-4 text-muted"></i>
+                <p class="mt-3 text-muted">No releases found matching your criteria</p>
+                <button class="btn btn-outline-secondary" onclick="clearFilters()">
+                    Clear Filters
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    releasesList.innerHTML = `
+        <div class="row">
+            ${filteredReleases.map(release => `
+                <div class="col-lg-6 col-xl-4 mb-3">
+                    <div class="card h-100 release-card ${release.released ? 'release-released' : 'release-unreleased'}" data-release-name="${release.name}">
+                        <div class="card-body d-flex flex-column">
+                            <div class="flex-grow-1">
+                                <h6 class="card-title">
+                                    <a href="/releases/${encodeURIComponent(release.name)}?project=${encodeURIComponent(getSelectedProjects()[0] || 'ESP')}" 
+                                       class="text-decoration-none">
+                                        ${release.name}
+                                    </a>
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    ${release.description || 'No description available'}
+                                </p>
+                            </div>
+                            <div class="mt-auto">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-${release.released ? 'success' : 'warning'}">
+                                        ${release.released ? 'Released' : 'Unreleased'}
+                                    </span>
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar3"></i>
+                                        ${formatDate(release.releaseDate)}
+                                    </small>
+                                </div>
+                                <div class="mb-2">
+                                    <div class="row text-center">
+                                        <div class="col-6">
+                                            <div class="text-primary">
+                                                <strong class="ticket-count">${release.ticketCount || 0}</strong>
+                                                <span class="stats-loading spinner-border spinner-border-sm ms-1" style="display: ${release.ticketCount ? 'none' : 'inline-block'};" role="status"></span>
+                                            </div>
+                                            <small class="text-muted">Tickets</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="text-success">
+                                                <strong class="story-points">${release.totalStoryPoints || 0}</strong>
+                                                <span class="stats-loading spinner-border spinner-border-sm ms-1" style="display: ${release.totalStoryPoints ? 'none' : 'inline-block'};" role="status"></span>
+                                            </div>
+                                            <small class="text-muted">Story Points</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-grid">
+                                    <a href="/releases/${encodeURIComponent(release.name)}?project=${encodeURIComponent(getSelectedProjects()[0] || 'ESP')}" 
+                                       class="btn btn-primary btn-sm">
+                                        <i class="bi bi-eye"></i> View Tickets
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    
+    // Load stats for visible releases asynchronously
+    setTimeout(() => {
+        loadAllVisibleStats();
+    }, 100);
+}
+
+function clearFilters() {
+    console.log('Clearing filters...');
+    
+    // Clear the multi-select dropdown for releases
+    const releaseSelect = document.getElementById('releaseSelect');
+    if (releaseSelect) {
+        // Try jQuery/Select2 first, fallback to vanilla JS
+        if (typeof $ !== 'undefined' && $('#releaseSelect').data('select2')) {
+            $('#releaseSelect').val(null).trigger('change');
+            console.log('Cleared Select2 release selection');
+        } else {
+            // Clear all selected options
+            for (let i = 0; i < releaseSelect.options.length; i++) {
+                releaseSelect.options[i].selected = false;
+            }
+            console.log('Cleared vanilla JS release selection');
+        }
+    }
+    
+    // Clear the multi-select dropdown for projects
+    const projectSelect = document.getElementById('projectSelect');
+    if (projectSelect) {
+        // Try jQuery/Select2 first, fallback to vanilla JS
+        if (typeof $ !== 'undefined' && $('#projectSelect').data('select2')) {
+            $('#projectSelect').val(null).trigger('change');
+            console.log('Cleared Select2 project selection');
+        } else {
+            // Clear all selected options
+            for (let i = 0; i < projectSelect.options.length; i++) {
+                projectSelect.options[i].selected = false;
+            }
+            console.log('Cleared vanilla JS project selection');
+        }
+    }
+
+    // Clear the multi-select dropdown for labels
+    const labelsSelect = document.getElementById('labelsSelect');
+    if (labelsSelect) {
+        // Try jQuery/Select2 first, fallback to vanilla JS
+        if (typeof $ !== 'undefined' && $('#labelsSelect').data('select2')) {
+            $('#labelsSelect').val(null).trigger('change');
+            console.log('Cleared Select2 labels selection');
+        } else {
+            // Clear all selected options
+            for (let i = 0; i < labelsSelect.options.length; i++) {
+                labelsSelect.options[i].selected = false;
+            }
+            console.log('Cleared vanilla JS labels selection');
+        }
+    }
+    
+    // Clear other filters
+    const statusFilter = document.getElementById('statusFilter');
+    if (statusFilter) {
+        statusFilter.value = '';
+    }
+    
+    const teamFilter = document.getElementById('teamFilter');
+    if (teamFilter) {
+        teamFilter.value = '';
+    }
+    
+    const sortBy = document.getElementById('sortBy');
+    if (sortBy) {
+        sortBy.value = 'date-desc';
+    }
+    
+    // Hide tickets section and update UI
+    hideTicketsView();
+    
+    // Show initial message since all filters are cleared
+    showInitialMessage();
+    
+    console.log('Filters cleared successfully');
+}
+
+async function viewSelectedReleases() {
+    let selectedReleases;
+    
+    // Try jQuery/Select2 first, fallback to vanilla JS
+    if (typeof $ !== 'undefined' && $('#releaseSelect').length) {
+        selectedReleases = $('#releaseSelect').val() || [];
+    } else {
+        selectedReleases = Array.from(document.getElementById('releaseSelect').selectedOptions)
+                                .map(option => option.value);
+    }
+    
+    // Get selected labels and team
+    const selectedLabels = $('#labelsSelect').val() || [];
+    const selectedTeam = document.getElementById('teamFilter').value;
+    const selectedProjects = getSelectedProjects();
+    
+    // FIRST: Check if project is selected (MANDATORY)
+    if (selectedProjects.length === 0) {
+        // Show error message
+        const projectSelect = document.getElementById('projectSelect');
+        const projectError = document.getElementById('projectError');
+        
+        if (projectSelect) {
+            projectSelect.classList.add('is-invalid');
+        }
+        if (projectError) {
+            projectError.style.display = 'block';
+        }
+        
+        alert('⚠️ Project is required!\n\nPlease select at least one project before viewing releases or tickets.');
+        
+        // Scroll to the project field
+        projectSelect.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+    
+    // Clear any previous error styling
+    const projectSelect = document.getElementById('projectSelect');
+    const projectError = document.getElementById('projectError');
+    if (projectSelect) {
+        projectSelect.classList.remove('is-invalid');
+    }
+    if (projectError) {
+        projectError.style.display = 'none';
+    }
+    
+    // Check if we have either releases OR labels selected
+    if (selectedReleases.length === 0 && selectedLabels.length === 0) {
+        alert('Please select at least one release OR one label to view tickets.');
+        return;
+    }
+    
+    // Build URL parameters
+    const urlParams = new URLSearchParams();
+    if (selectedLabels.length > 0) {
+        urlParams.append('labels', selectedLabels.join(','));
+    }
+    if (selectedTeam) {
+        urlParams.append('team', selectedTeam);
+        console.log(`🏢 Adding team parameter: ${selectedTeam}`);
+    }
+    
+    // Add selected project to URL parameters
+    if (selectedProjects.length > 0) {
+        urlParams.append('project', selectedProjects[0]);
+    }
+    
+    // Case 1: Only labels selected (no releases) - go to multiple releases page with label filter
+    if (selectedReleases.length === 0 && selectedLabels.length > 0) {
+        console.log('🏷️ Only labels selected, showing all releases with this label');
+        window.location.href = `/releases/multiple?${urlParams.toString()}`;
+        return;
+    }
+    
+    // Case 2: Only one release selected - go to its detail page
+    if (selectedReleases.length === 1) {
+        let url = `/releases/${encodeURIComponent(selectedReleases[0])}`;
+        
+        if (urlParams.toString()) {
+            url += `?${urlParams.toString()}`;
+        }
+        window.location.href = url;
+        return;
+    }
+    
+    // Case 3: Multiple releases selected - go to multiple releases page
+    const releaseParams = selectedReleases.join(',');
+    urlParams.append('releases', releaseParams);
+    
+    console.log(`🏢 Adding project parameter to multiple releases: ${selectedProjects[0] || 'None'}`);
+    
+    window.location.href = `/releases/multiple?${urlParams.toString()}`;
+}
+
+async function loadTicketsFromMultipleReleases(releaseNames) {
+    const ticketsSection = document.getElementById('selectedTicketsSection');
+    const ticketsList = document.getElementById('selectedTicketsList');
+    const ticketCount = document.getElementById('ticketCount');
+    
+    // Show loading state
+    ticketsSection.style.display = 'block';
+    ticketsList.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading tickets...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading tickets from ${releaseNames.length} releases...</p>
+        </div>
+    `;
+    
+    try {
+        // Get selected labels and team
+        const selectedLabels = $('#labelsSelect').val() || [];
+        const selectedTeam = document.getElementById('teamFilter').value;
+        
+        // Fetch tickets from all selected releases
+        const allTickets = [];
+        const releaseStats = [];
+        
+        for (const releaseName of releaseNames) {
+            // Build URL with labels and team parameters
+            let ticketUrl = `/api/releases/${encodeURIComponent(releaseName)}/tickets`;
+            const params = new URLSearchParams();
+            
+            // Add selected project parameter
+            const selectedProjects = getSelectedProjects();
+            if (selectedProjects.length > 0) {
+                params.append('project', selectedProjects[0]);
+            }
+            
+            if (selectedLabels.length > 0) {
+                params.append('labels', selectedLabels.join(','));
+            }
+            
+            if (selectedTeam) {
+                params.append('team', selectedTeam);
+                console.log(`🏢 Adding team filter to tickets: ${selectedTeam}`);
+            }
+            
+            if (params.toString()) {
+                ticketUrl += `?${params.toString()}`;
+            }
+            
+            const response = await fetch(ticketUrl);
+            const data = await response.json();
+            
+            if (data.tickets) {
+                // Add release name to each ticket for identification
+                data.tickets.forEach(ticket => {
+                    ticket.releaseName = releaseName;
+                });
+                allTickets.push(...data.tickets);
+                releaseStats.push({
+                    name: releaseName,
+                    stats: data.stats,
+                    total: data.total
+                });
+            }
+        }
+        
+        // Display tickets
+        displayMultipleReleaseTickets(allTickets, releaseStats);
+        ticketCount.textContent = `${allTickets.length} tickets`;
+        
+        // Scroll to tickets section
+        ticketsSection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+        
+    } catch (error) {
+        console.error('Error loading tickets:', error);
+        ticketsList.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i>
+                Error loading tickets: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function displayMultipleReleaseTickets(tickets, releaseStats) {
+    const ticketsList = document.getElementById('selectedTicketsList');
+    
+    if (tickets.length === 0) {
+        ticketsList.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-inbox display-4 text-muted"></i>
+                <p class="mt-3 text-muted">No tickets found in the selected releases</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Group tickets by release for better organization
+    const ticketsByRelease = {};
+    tickets.forEach(ticket => {
+        if (!ticketsByRelease[ticket.releaseName]) {
+            ticketsByRelease[ticket.releaseName] = [];
+        }
+        ticketsByRelease[ticket.releaseName].push(ticket);
+    });
+    
+    let html = `
+        <div class="row mb-4">
+            <div class="col-12">
+                <h6 class="text-muted mb-3">Summary by Release</h6>
+                <div class="row">
+                    ${releaseStats.map(stat => `
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-primary">
+                                <div class="card-body">
+                                    <h6 class="card-title">${stat.name}</h6>
+                                    <p class="card-text">
+                                        <strong>${stat.total}</strong> tickets<br>
+                                        <strong>${stat.stats.total_story_points || 0}</strong> story points
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <h6 class="text-muted mb-3">All Tickets</h6>
+            </div>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Release</th>
+                        <th>Key</th>
+                        <th>Summary</th>
+                        <th>Status</th>
+                        <th>Assignee</th>
+                        <th>Type</th>
+                        <th>Priority</th>
+                        <th>Story Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tickets.map(ticket => `
+                        <tr>
+                            <td>
+                                <span class="badge bg-secondary">${ticket.releaseName}</span>
+                            </td>
+                            <td>
+                                <a href="${ticket.url}" target="_blank" class="text-decoration-none">
+                                    ${ticket.key}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="text-truncate" style="max-width: 300px;" title="${ticket.summary}">
+                                    ${ticket.summary}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-${getStatusClass(ticket.status)}">
+                                    ${ticket.status}
+                                </span>
+                            </td>
+                            <td>${ticket.assignee || 'Unassigned'}</td>
+                            <td>${ticket.issue_type}</td>
+                            <td>
+                                <span class="${getPriorityClass(ticket.priority)}">
+                                    ${ticket.priority}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">
+                                    ${ticket.story_points || '-'}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    ticketsList.innerHTML = html;
+}
+
+function hideTicketsView() {
+    document.getElementById('selectedTicketsSection').style.display = 'none';
+}
+
+async function exportSelectedTickets() {
+    let selectedReleases;
+    
+    // Try jQuery/Select2 first, fallback to vanilla JS
+    if (typeof $ !== 'undefined' && $('#releaseSelect').length) {
+        selectedReleases = $('#releaseSelect').val() || [];
+    } else {
+        selectedReleases = Array.from(document.getElementById('releaseSelect').selectedOptions)
+                                .map(option => option.value);
+    }
+    
+    if (selectedReleases.length === 0) {
+        alert('Please select releases first.');
+        return;
+    }
+    
+    // For multiple releases, we'll export each release separately
+    // or create a combined export - let's do combined
+    try {
+        const exportUrl = `/api/releases/export-multiple?releases=${selectedReleases.map(r => encodeURIComponent(r)).join(',')}`;
+        window.open(exportUrl, '_blank');
+    } catch (error) {
+        console.error('Error exporting tickets:', error);
+        alert('Error exporting tickets. Please try again.');
+    }
+}
+
+function showTicketsView(release) {
+    const ticketsList = document.getElementById('selectedTicketsList');
+    const ticketCount = document.getElementById('ticketCount');
+    
+    // Clear existing tickets
+    ticketsList.innerHTML = '';
+    
+    // Find the release data
+    const releaseData = allReleases.find(r => r.name === release);
+    if (!releaseData || !Array.isArray(releaseData.tickets)) {
+        ticketCount.textContent = '0 tickets';
+        document.getElementById('selectedTicketsSection').style.display = 'none';
+        return;
+    }
+    
+    // Add each ticket to the list
+    releaseData.tickets.forEach(ticket => {
+        const ticketItem = document.createElement('div');
+        ticketItem.className = 'border-bottom py-2';
+        ticketItem.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="/tickets/${encodeURIComponent(ticket.id)}" class="text-decoration-none">
+                        <strong>${ticket.summary}</strong>
+                    </a>
+                    <div class="text-muted small">
+                        <i class="bi bi-tag"></i> ${ticket.status}
+                    </div>
+                </div>
+                <div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="viewTicketDetails('${encodeURIComponent(ticket.id)}')">
+                        <i class="bi bi-eye"></i> View
+                    </button>
+                </div>
+            </div>
+        `;
+        ticketsList.appendChild(ticketItem);
+    });
+    
+    ticketCount.textContent = `${releaseData.tickets.length} tickets`;
+    document.getElementById('selectedTicketsSection').style.display = 'block';
+}
+
+function hideTicketsView() {
+    document.getElementById('selectedTicketsSection').style.display = 'none';
+}
+
+// Load teams from API with project filtering
+async function loadTeams(selectedProjects = []) {
+    try {
+        // Build API URL with project filters (same logic as release detail page)
+        let apiUrl = '/api/teams';
+        if (selectedProjects.length > 0) {
+            apiUrl += `?project=${selectedProjects.join(',')}`;
+            console.log(`🏢 Loading teams for project(s): ${selectedProjects.join(',')}`);
+        } else {
+            console.log('🏢 Loading all teams (no project filter)');
+        }
+        
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const teams = await response.json();
+        const teamFilter = document.getElementById('teamFilter');
+        
+        // Check if teamFilter element exists
+        if (!teamFilter) {
+            console.log('⚠️  Team filter element not found on this page');
+            return;
+        }
+        
+        // Clear existing options except "All Teams"
+        teamFilter.innerHTML = '<option value="">All Teams</option>';
+        
+        // Add team options
+        teams.forEach(team => {
+            const option = document.createElement('option');
+            option.value = team;
+            option.textContent = team;
+            teamFilter.appendChild(option);
+        });
+        
+        // Add change listener for team filter to refresh stats
+        teamFilter.removeEventListener('change', teamFilterChangeHandler); // Remove existing listener
+        teamFilter.addEventListener('change', teamFilterChangeHandler);
+        
+        console.log(`✅ Loaded ${teams.length} teams for projects: [${selectedProjects.join(', ')}]`);
+    } catch (error) {
+        console.error('Error loading teams:', error);
+        // Keep the default "All Teams" option
+        const teamFilter = document.getElementById('teamFilter');
+        if (teamFilter) {
+            teamFilter.innerHTML = '<option value="">All Teams</option>';
+        }
+    }
+}
+
+// Load projects from API
+async function loadProjects() {
+    try {
+        const response = await fetch('/api/projects');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const projects = await response.json();
+        populateProjectSelect(projects);
+        
+        console.log(`✅ Loaded ${projects.length} projects`);
+    } catch (error) {
+        console.error('Error loading projects:', error);
+    }
+}
+
+function populateProjectSelect(projects) {
+    // Check if jQuery and Select2 are available
+    if (typeof $ === 'undefined' || !$.fn.select2) {
+        console.warn('jQuery or Select2 not available, using basic multiselect for projects');
+        populateBasicProjectSelect(projects);
+        return;
+    }
+    
+    const projectSelect = $('#projectSelect'); // Using jQuery for Select2
+    projectSelect.empty(); // Clear existing options
+    
+    // Filter projects to only include ESP and PSSR
+    const allowedProjects = ['ESP', 'PSSR'];
+    const filteredProjects = projects.filter(project => 
+        allowedProjects.includes(project.key)
+    );
+    
+    // Add options for each filtered project
+    filteredProjects.forEach(project => {
+        const option = new Option(
+            `${project.key} - ${project.name}`,
+            project.key,
+            false,
+            false
+        );
+        // Add description as data attribute for tooltips
+        $(option).attr('data-description', project.description || '');
+        projectSelect.append(option);
+    });
+    
+    console.log(`Filtered to ${filteredProjects.length} allowed projects: ${allowedProjects.join(', ')}`);
+    
+    // Initialize Select2
+    projectSelect.select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Search and select projects...',
+        allowClear: true,
+        closeOnSelect: false,
+        width: '100%',
+        dropdownParent: projectSelect.parent(),
+        templateResult: formatProjectOption,
+        templateSelection: formatProjectSelection
+    });
+    
+    // Add event listener for selection changes
+    projectSelect.on('change', function() {
+        const selectedProjects = $(this).val() || [];
+        console.log('Selected projects:', selectedProjects);
+        
+        // Clear release selection when projects change
+        const releaseSelect = $('#releaseSelect');
+        if (releaseSelect.length && releaseSelect.data('select2')) {
+            releaseSelect.val(null).trigger('change');
+        }
+        
+        // Clear team selection when projects change
+        const teamFilter = document.getElementById('teamFilter');
+        if (teamFilter) {
+            teamFilter.value = '';
+        }
+        
+        // Reload teams for the selected projects
+        loadTeams(selectedProjects);
+        
+        // Reload releases for the selected projects
+        if (selectedProjects.length > 0) {
+            loadReleasesForFilters(selectedProjects).then(() => {
+                // After releases are loaded, load and display them
+                loadReleases();
+            });
+        } else {
+            // Load all releases when no projects are selected
+            loadReleasesForFilters([]).then(() => {
+                // Show the initial message when no projects are selected
+                showInitialMessage();
+            });
+        }
+    });
+}
+
+// Initialize Labels dropdown
+function initializeLabelsDropdown() {
+    console.log('Initializing Labels dropdown...');
+    
+    const labelsSelect = $('#labelsSelect'); // Using jQuery for Select2
+    
+    // Initialize Select2 (matching Project dropdown configuration)
+    labelsSelect.select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Search and select labels...',
+        allowClear: true,
+        closeOnSelect: false,
+        width: '100%',
+        dropdownParent: labelsSelect.parent(),
+        templateResult: function (data) {
+            if (!data.id) { 
+                return data.text; 
+            }
+            return data.text;
+        },
+        templateSelection: function (data) {
+            return data.text || data.id;
+        }
+    });
+    
+    // Add event listener for selection changes
+    labelsSelect.on('change', function() {
+        const selectedLabels = $(this).val() || [];
+        console.log('Selected labels:', selectedLabels);
+        
+        // Reload stats for visible releases when labels change
+        setTimeout(() => {
+            refreshVisibleReleaseStats();
+        }, 100);
+    });
+    
+    console.log('Labels dropdown initialized successfully');
+}
+
+function populateBasicProjectSelect(projects) {
+    // Fallback for when Select2 is not available
+    const projectSelect = document.getElementById('projectSelect');
+    projectSelect.innerHTML = '';
+    
+    // Filter projects to only include ESP and PSSR
+    const allowedProjects = ['ESP', 'PSSR'];
+    const filteredProjects = projects.filter(project => 
+        allowedProjects.includes(project.key)
+    );
+    
+    // Add options for each filtered project
+    filteredProjects.forEach(project => {
+        const option = document.createElement('option');
+        option.value = project.key;
+        option.textContent = `${project.key} - ${project.name}`;
+        option.title = project.description || '';
+        projectSelect.appendChild(option);
+    });
+    
+    console.log(`Filtered to ${filteredProjects.length} allowed projects: ${allowedProjects.join(', ')}`);
+    
+    // Add event listener for selection changes
+    projectSelect.addEventListener('change', function() {
+        const selectedProjects = Array.from(this.selectedOptions).map(option => option.value);
+        console.log('Selected projects:', selectedProjects);
+        
+        // Clear team selection when projects change
+        const teamFilter = document.getElementById('teamFilter');
+        if (teamFilter) {
+            teamFilter.value = '';
+        }
+        
+        // Reload teams for the selected projects
+        loadTeams(selectedProjects);
+        
+        // Load releases when projects are selected
+        if (selectedProjects.length > 0) {
+            loadReleases();
+        } else {
+            // Show the initial message when no projects are selected
+            showInitialMessage();
+        }
+    });
+}
+
+function formatProjectOption(project) {
+    if (!project.id) {
+        return project.text;
+    }
+    
+    const $project = $(
+        `<span>
+            <strong>${project.text.split(' - ')[0]}</strong> - ${project.text.split(' - ')[1] || ''}
+        </span>`
+    );
+    return $project;
+}
+
+function formatProjectSelection(project) {
+    if (!project.id) {
+        return project.text;
+    }
+    return project.text.split(' - ')[0]; // Show just the key in selection
+}
+
+// Helper function to get selected projects from the dropdown
+function getSelectedProjects() {
+    try {
+        const projectSelect = document.getElementById('projectSelect');
+        if (!projectSelect) {
+            console.warn('Project select element not found');
+            return [];
+        }
+        
+        // Handle both single and multi-select
+        const selected = Array.from(projectSelect.selectedOptions).map(option => option.value);
+        return selected.filter(value => value); // Remove empty values
+    } catch (error) {
+        console.warn('Error getting selected projects:', error);
+        return [];
+    }
+}
+
+// Function to load stats for a specific release
+async function loadReleaseStats(releaseName, cardElement) {
+    try {
+        // Add cache-busting timestamp to prevent browser caching
+        const timestamp = new Date().getTime();
+        
+        // Build URL with project parameter
+        const params = new URLSearchParams({
+            t: timestamp,
+            bust: Math.random()
+        });
+        
+        // Get selected projects from the UI dropdown
+        const selectedProjects = getSelectedProjects();
+        if (selectedProjects.length > 0) {
+            // Use the first selected project (or all if multiple)
+            params.append('project', selectedProjects.join(','));
+            console.log(`📊 Using selected project(s) for stats: ${selectedProjects.join(',')}`);
+        } else {
+            console.warn(`⚠️  No project selected for stats of release: ${releaseName}. Stats may not load correctly.`);
+        }
+        
+        // Get selected labels and team from the UI dropdowns
+        const selectedLabels = $('#labelsSelect').val() || [];
+        const selectedTeam = document.getElementById('teamFilter').value;
+        
+        if (selectedLabels.length > 0) {
+            params.append('labels', selectedLabels.join(','));
+            console.log(`📊 Using selected labels for stats: ${selectedLabels.join(',')}`);
+        }
+        
+        if (selectedTeam) {
+            params.append('team', selectedTeam);
+            console.log(`📊 Using selected team for stats: ${selectedTeam}`);
+        }
+        
+        const finalUrl = `/api/releases/${encodeURIComponent(releaseName)}/stats?${params}`;
+        console.log(`📊 Final stats URL for ${releaseName}: ${finalUrl}`);
+        console.log(`📊 Filters applied: Labels=[${selectedLabels.join(',')}], Team=[${selectedTeam}], Project=[${selectedProjects.join(',')}]`);
+        
+        const response = await fetch(finalUrl, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const stats = await response.json();
+        console.log(`📊 Stats response for ${releaseName}:`, stats);
+        
+        // Update the card with the stats
+        const ticketCountElement = cardElement.querySelector('.ticket-count');
+        const storyPointsElement = cardElement.querySelector('.story-points');
+        
+        console.log(`📊 Updating card for ${releaseName}:`);
+        console.log(`   - ticketCountElement:`, ticketCountElement);
+        console.log(`   - storyPointsElement:`, storyPointsElement);
+        console.log(`   - stats:`, stats);
+        
+        if (ticketCountElement) {
+            const newTicketCount = stats.ticketCount || 0;
+            console.log(`   - Setting ticket count to: ${newTicketCount}`);
+            ticketCountElement.textContent = newTicketCount;
+            
+            // Highlight the change for debugging
+            if (newTicketCount > 0) {
+                ticketCountElement.style.backgroundColor = '#90EE90';
+                setTimeout(() => ticketCountElement.style.backgroundColor = '', 2000);
+            }
+        } else {
+            console.warn(`   ❌ No ticket count element found for ${releaseName}`);
+        }
+        
+        if (storyPointsElement) {
+            const newStoryPoints = stats.totalStoryPoints || 0;
+            console.log(`   - Setting story points to: ${newStoryPoints}`);
+            storyPointsElement.textContent = newStoryPoints;
+            
+            // Highlight the change for debugging
+            if (newStoryPoints > 0) {
+                storyPointsElement.style.backgroundColor = '#87CEEB';
+                setTimeout(() => storyPointsElement.style.backgroundColor = '', 2000);
+            }
+        } else {
+            console.warn(`   ❌ No story points element found for ${releaseName}`);
+        }
+        
+        // Remove loading indicator
+        const loadingElements = cardElement.querySelectorAll('.stats-loading');
+        loadingElements.forEach(el => el.style.display = 'none');
+        
+    } catch (error) {
+        console.warn(`Failed to load stats for ${releaseName}:`, error);
+        
+        // Show 0 values and remove loading indicator
+        const ticketCountElement = cardElement.querySelector('.ticket-count');
+        const storyPointsElement = cardElement.querySelector('.story-points');
+        const loadingElements = cardElement.querySelectorAll('.stats-loading');
+        
+        if (ticketCountElement) ticketCountElement.textContent = '0';
+        if (storyPointsElement) storyPointsElement.textContent = '0';
+        loadingElements.forEach(el => el.style.display = 'none');
+    }
+}
+
+// Team filter change handler
+function teamFilterChangeHandler() {
+    const selectedTeam = document.getElementById('teamFilter').value;
+    console.log('Team filter changed:', selectedTeam);
+    
+    // Reload stats for visible releases when team filter changes
+    setTimeout(() => {
+        refreshVisibleReleaseStats();
+    }, 100);
+}
+
+// Function to refresh stats for all visible release cards
+async function refreshVisibleReleaseStats() {
+    console.log('🔄 Refreshing stats for visible releases with current filters...');
+    
+    const selectedLabels = $('#labelsSelect').val() || [];
+    const selectedTeam = document.getElementById('teamFilter').value;
+    const selectedProjects = getSelectedProjects();
+    
+    console.log('🔄 Current filters:', {
+        projects: selectedProjects,
+        labels: selectedLabels,
+        team: selectedTeam
+    });
+    
+    // Only refresh if we have releases displayed
+    const releaseCards = document.querySelectorAll('.release-card');
+    if (releaseCards.length === 0) {
+        console.log('🔄 No release cards to refresh');
+        return;
+    }
+    
+    // Reload stats for each visible release card
+    await loadAllVisibleStats();
+}
+
+// Function to load stats for all visible releases using batch endpoint
+async function loadAllVisibleStats() {
+    const releaseCards = document.querySelectorAll('.release-card');
+    const releaseNames = Array.from(releaseCards).map(card => 
+        card.getAttribute('data-release-name')
+    ).filter(name => name);
+    
+    console.log('🔍 DEBUG: loadAllVisibleStats called');
+    console.log('🔍 Found release cards:', releaseCards.length);
+    console.log('🔍 Card elements:', Array.from(releaseCards));
+    console.log('🔍 Extracted release names:', releaseNames);
+    console.log('🔍 Release names being sent to batch:', releaseNames);
+    
+    if (releaseNames.length === 0) {
+        console.log('No release names found, skipping stats loading');
+        return;
+    }
+    
+    // TEMPORARY: Use individual stats loading instead of problematic batch endpoint
+    console.log('🔧 Using individual stats loading (bypassing batch endpoint)');
+    
+    for (let i = 0; i < releaseNames.length; i++) {
+        const releaseName = releaseNames[i];
+        const card = document.querySelector(`.release-card[data-release-name="${releaseName}"]`);
+        
+        if (card) {
+            console.log(`🔧 Loading individual stats for: ${releaseName}`);
+            try {
+                await loadReleaseStats(releaseName, card);
+                console.log(`✅ Successfully loaded stats for: ${releaseName}`);
+            } catch (error) {
+                console.warn(`❌ Failed to load stats for ${releaseName}:`, error);
+            }
+        } else {
+            console.warn(`❌ No card found for release: ${releaseName}`);
+        }
+        
+        // Small delay between requests
+        if (i < releaseNames.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+    }
+    
+    return; // Skip the batch endpoint entirely for now
+    
+    // ORIGINAL BATCH CODE (temporarily disabled):
+    const batchSize = 15; 
+    
+    for (let i = 0; i < releaseNames.length; i += batchSize) {
+        const batchReleases = releaseNames.slice(i, i + batchSize);
+        
+        try {
+            console.log(`Loading stats for batch ${Math.floor(i/batchSize) + 1}: ${batchReleases.length} releases`);
+            console.log(`Release names in batch:`, batchReleases);
+            
+            const requestPayload = {
+                releaseNames: batchReleases,
+                maxResults: 50 // Limit for performance
+            };
+            console.log('🚀 BATCH REQUEST DETAILS:');
+            console.log('   - Batch size:', batchReleases.length);
+            console.log('   - Batch releases:', batchReleases);
+            console.log('   - Full payload:', requestPayload);
+            console.log('   - JSON payload:', JSON.stringify(requestPayload));
+            
+            const response = await fetch('/api/releases/batch-stats', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestPayload)
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`HTTP ${response.status}: ${response.statusText}`);
+                console.error('Error response:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const responseText = await response.text();
+            console.log('Raw response:', responseText);
+            
+            let batchData;
+            try {
+                batchData = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Failed to parse JSON response:', parseError);
+                console.error('Response text:', responseText);
+                throw new Error('Invalid JSON response from server');
+            }
+            
+            console.log(`Received stats for ${Object.keys(batchData.stats || {}).length} releases`);
+            console.log('Batch data:', batchData);
+            
+            // Update each release card with its stats
+            Object.entries(batchData.stats).forEach(([releaseName, stats]) => {
+                console.log(`Processing stats for release: ${releaseName}`, stats);
+                
+                // Escape special characters in CSS selector
+                const escapedReleaseName = releaseName.replace(/[.]/g, '\\.');
+                let card = document.querySelector(`.release-card[data-release-name="${escapedReleaseName}"]`);
+                
+                // If escaped version doesn't work, try the original
+                if (!card) {
+                    card = document.querySelector(`.release-card[data-release-name="${releaseName}"]`);
+                }
+                
+                // If still not found, try finding by text content
+                if (!card) {
+                    const allCards = document.querySelectorAll('.release-card');
+                    card = Array.from(allCards).find(c => 
+                        c.getAttribute('data-release-name') === releaseName
+                    );
+                }
+                
+                if (card) {
+                    updateReleaseCardStats(card, stats);
+                } else {
+                    console.warn(`No card found for release: ${releaseName}`);
+                    console.log('Available cards:', Array.from(document.querySelectorAll('.release-card')).map(c => c.getAttribute('data-release-name')));
+                }
+            });
+            
+        } catch (error) {
+            console.warn(`Failed to load batch stats for releases ${i}-${i + batchSize}:`, error);
+            
+            // Fallback to individual requests for this batch
+            const fallbackPromises = batchReleases.map(releaseName => {
+                const card = document.querySelector(`.release-card[data-release-name="${releaseName}"]`);
+                return card ? loadReleaseStats(releaseName, card) : Promise.resolve();
+            });
+            
+            await Promise.all(fallbackPromises);
+        }
+        
+        // Small delay between batches
+        if (i + batchSize < releaseNames.length) {
+            await new Promise(resolve => setTimeout(resolve, 200)); // Reduced delay
+        }
+    }
+}
+
+// Helper function to update release card with stats
+function updateReleaseCardStats(cardElement, stats) {
+    console.log('Updating card stats:', stats);
+    console.log('Card element:', cardElement);
+    
+    const ticketCountElement = cardElement.querySelector('.ticket-count');
+    const storyPointsElement = cardElement.querySelector('.story-points');
+    
+    console.log('Ticket count element:', ticketCountElement);
+    console.log('Story points element:', storyPointsElement);
+    
+    if (ticketCountElement) {
+        const newTicketCount = stats.ticketCount || 0;
+        ticketCountElement.textContent = newTicketCount;
+        console.log(`📊 BATCH UPDATE: Updated ticket count to: ${newTicketCount}`);
+        
+        // Highlight batch updates for debugging
+        if (newTicketCount > 0) {
+            ticketCountElement.style.backgroundColor = '#FFD700';
+            setTimeout(() => ticketCountElement.style.backgroundColor = '', 3000);
+        }
+    } else {
+        console.warn('❌ BATCH UPDATE: No ticket count element found');
+    }
+    
+    if (storyPointsElement) {
+        const newStoryPoints = stats.totalStoryPoints || 0;
+        storyPointsElement.textContent = newStoryPoints;
+        console.log(`📊 BATCH UPDATE: Updated story points to: ${newStoryPoints}`);
+        
+        // Highlight batch updates for debugging
+        if (newStoryPoints > 0) {
+            storyPointsElement.style.backgroundColor = '#FFA500';
+            setTimeout(() => storyPointsElement.style.backgroundColor = '', 3000);
+        }
+    } else {
+        console.warn('❌ BATCH UPDATE: No story points element found');
+    }
+    
+    // Remove loading indicators
+    const loadingElements = cardElement.querySelectorAll('.stats-loading');
+    loadingElements.forEach(el => el.style.display = 'none');
+    
+    // Show error indicator if there was an error
+    if (stats.error) {
+        console.warn(`Error loading stats for ${stats.releaseName}: ${stats.error}`);
+        const ticketCountElement = cardElement.querySelector('.ticket-count');
+        if (ticketCountElement) {
+            ticketCountElement.innerHTML = '<i class="bi bi-exclamation-triangle text-warning" title="Error loading stats"></i>';
+        }
+    }
+}
+
+// Function to clear cache and perform hard refresh
+async function clearCacheAndRefresh() {
+    try {
+        // Clear server-side cache
+        await fetch('/api/clear-cache', { method: 'POST' });
+        
+        // Clear browser cache for this page
+        if ('caches' in window) {
+            caches.keys().then(function(names) {
+                names.forEach(function(name) {
+                    caches.delete(name);
+                });
+            });
+        }
+        
+        // Clear any local storage
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Force reload from server
+        window.location.reload(true);
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        // Still try to reload
+        window.location.reload(true);
+    }
+}
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Show initial message
+    showInitialMessage();
+    
+    // Ensure jQuery and Select2 are loaded before initializing
+    if (typeof $ !== 'undefined' && $.fn.select2) {
+        loadReleasesForFilters(); // Load releases for filter dropdown only
+        loadTeams([]); // Load teams for all projects initially
+        loadProjects(); // Load projects for multiselect
+        initializeLabelsDropdown(); // Initialize labels dropdown
+    } else {
+        // Retry after a short delay if libraries aren't ready
+        setTimeout(function() {
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                loadReleasesForFilters(); // Load releases for filter dropdown only
+                loadTeams([]); // Load teams for all projects initially
+                loadProjects(); // Load projects for multiselect
+                initializeLabelsDropdown(); // Initialize labels dropdown
+            } else {
+                console.error('jQuery or Select2 not loaded properly');
+                // Fallback: load releases without Select2
+                loadReleasesForFilters(); // Still try to load releases for filters
+                loadTeams([]); // Still try to load teams
+                loadProjects(); // Still try to load projects
+                initializeLabelsDropdown(); // Still try to initialize labels dropdown
+            }
+        }, 500);
+    }
+    
+    // Add class to body for wider layout consistency
+    document.body.classList.add('release-detail-page');
+    
+});
+</script>
+{% endblock %}

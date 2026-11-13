@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Multiple Releases - JIRA Release Planning Tool{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2">
+                <i class="bi bi-list-check"></i> Multiple Releases View
+            </h1>
+            <div>
+                <button class="btn btn-outline-success me-2" onclick="exportAllTickets()">
+                    <i class="bi bi-download"></i> Export All
+                </button>
+                <a href="{{ url_for('releases_page') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Releases
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Selected Releases Info -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Selected Releases</h6>
+                <div id="selectedReleasesList">
+                    {% for release_name in release_names %}
+                        <span class="badge bg-primary me-2 mb-2">{{ release_name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Release Statistics -->
+<div class="row mb-4" id="releaseStatsSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart"></i> Release Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="releaseStatsContent">
+                    <!-- Statistics will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tickets Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-task"></i> All Tickets
+                    <span id="ticketCount" class="badge bg-info ms-2">Loading...</span>
+                </h5>
+                <div>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="viewMode" id="tableView" checked>
+                        <label class="btn btn-outline-primary btn-sm" for="tableView">
+                            <i class="bi bi-table"></i> Table
+                        </label>
+                        <input type="radio" class="btn-check" name="viewMode" id="cardView">
+                        <label class="btn btn-outline-primary btn-sm" for="cardView">
+                            <i class="bi bi-grid-3x3-gap"></i> Cards
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="ticketsContent">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading tickets...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading tickets from multiple releases...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allTickets = [];
+let releaseStats = [];
+
+async function loadMultipleReleaseData() {
+    const releaseNames = [{% for name in release_names %}'{{ name|e }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    
+    try {
+        const response = await fetch(`/api/releases/multiple/tickets?releases=${releaseNames.map(r => encodeURIComponent(r)).join(',')}`);
+        const data = await response.json();
+        
+        if (data.tickets) {
+            allTickets = data.tickets;
+            releaseStats = data.release_stats;
+            
+            displayReleaseStats();
+            displayTickets();
+            
+            document.getElementById('ticketCount').textContent = `${allTickets.length} tickets`;
+        } else {
+            document.getElementById('ticketsContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Error loading tickets: ${data.error || 'Unknown error'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading tickets:', error);
+        document.getElementById('ticketsContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i>
+                Error loading tickets: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function displayReleaseStats() {
+    const statsSection = document.getElementById('releaseStatsSection');
+    const statsContent = document.getElementById('releaseStatsContent');
+    
+    if (releaseStats.length === 0) return;
+    
+    let html = '';
+    releaseStats.forEach(stat => {
+        html += `
+            <div class="col-md-4 mb-3">
+                <div class="card border-primary h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">${stat.name}</h6>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="h4 mb-0 text-primary">${stat.total}</div>
+                                <small class="text-muted">Tickets</small>
+                            </div>
+                            <div class="col-6">
+                                <div class="h4 mb-0 text-success">${stat.stats.total_story_points || 0}</div>
+                                <small class="text-muted">Story Points</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    statsContent.innerHTML = html;
+    statsSection.style.display = 'block';
+}
+
+function displayTickets() {
+    const isTableView = document.getElementById('tableView').checked;
+    const ticketsContent = document.getElementById('ticketsContent');
+    
+    if (allTickets.length === 0) {
+        ticketsContent.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-inbox display-4 text-muted"></i>
+                <p class="mt-3 text-muted">No tickets found in the selected releases</p>
+            </div>
+        `;
+        return;
+    }
+    
+    if (isTableView) {
+        displayTicketsTable();
+    } else {
+        displayTicketsCards();
+    }
+}
+
+function displayTicketsTable() {
+    const ticketsContent = document.getElementById('ticketsContent');
+    
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Release</th>
+                        <th>Key</th>
+                        <th>Summary</th>
+                        <th>Status</th>
+                        <th>Assignee</th>
+                        <th>Type</th>
+                        <th>Priority</th>
+                        <th>Story Points</th>
+                        <th>Labels</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    allTickets.forEach(ticket => {
+        const labelsHtml = ticket.labels && ticket.labels.length > 0 
+            ? ticket.labels.map(label => `<span class="badge bg-light text-dark">${label}</span>`).join(' ')
+            : '-';
+            
+        html += `
+            <tr>
+                <td>
+                    <span class="badge bg-secondary">${ticket.release_name}</span>
+                </td>
+                <td>
+                    <a href="${ticket.url}" target="_blank" class="text-decoration-none">
+                        ${ticket.key}
+                    </a>
+                </td>
+                <td>
+                    <div class="text-truncate" style="max-width: 300px;" title="${ticket.summary}">
+                        ${ticket.summary}
+                    </div>
+                </td>
+                <td>
+                    <span class="badge bg-${getStatusClass(ticket.status)}">
+                        ${ticket.status}
+                    </span>
+                </td>
+                <td>${ticket.assignee || 'Unassigned'}</td>
+                <td>${ticket.issue_type}</td>
+                <td>
+                    <span class="${getPriorityClass(ticket.priority)}">
+                        ${ticket.priority}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge bg-info">
+                        ${ticket.story_points || '-'}
+                    </span>
+                </td>
+                <td>${labelsHtml}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    document.getElementById('ticketsContent').innerHTML = html;
+}
+
+function displayTicketsCards() {
+    const ticketsContent = document.getElementById('ticketsContent');
+    
+    let html = '<div class="row">';
+    
+    allTickets.forEach(ticket => {
+        const labelsHtml = ticket.labels && ticket.labels.length > 0 
+            ? ticket.labels.map(label => `<span class="badge bg-light text-dark me-1">${label}</span>`).join('')
+            : '<span class="text-muted">No labels</span>';
+            
+        html += `
+            <div class="col-lg-6 col-xl-4 mb-3">
+                <div class="card h-100 ticket-card">
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-secondary">${ticket.release_name}</span>
+                            <span class="badge bg-${getStatusClass(ticket.status)}">${ticket.status}</span>
+                        </div>
+                        <h6 class="card-title">
+                            <a href="${ticket.url}" target="_blank" class="text-decoration-none">
+                                ${ticket.key}
+                            </a>
+                        </h6>
+                        <p class="card-text flex-grow-1">${ticket.summary}</p>
+                        <div class="mt-auto">
+                            <div class="row text-center mb-2">
+                                <div class="col-4">
+                                    <small class="text-muted">Type</small>
+                                    <div class="fw-bold">${ticket.issue_type}</div>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted">Priority</small>
+                                    <div class="${getPriorityClass(ticket.priority)}">${ticket.priority}</div>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted">Points</small>
+                                    <div class="fw-bold">${ticket.story_points || '-'}</div>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted">Assignee:</small>
+                                <span class="fw-bold">${ticket.assignee || 'Unassigned'}</span>
+                            </div>
+                            <div>
+                                <small class="text-muted">Labels:</small><br>
+                                ${labelsHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    document.getElementById('ticketsContent').innerHTML = html;
+}
+
+function exportAllTickets() {
+    const releaseNames = [{% for name in release_names %}'{{ name|e }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    const exportUrl = `/api/releases/export-multiple?releases=${releaseNames.map(r => encodeURIComponent(r)).join(',')}`;
+    window.open(exportUrl, '_blank');
+}
+
+// View mode toggle
+document.getElementById('tableView').addEventListener('change', function() {
+    if (this.checked) {
+        displayTickets();
+    }
+});
+
+document.getElementById('cardView').addEventListener('change', function() {
+    if (this.checked) {
+        displayTickets();
+    }
+});
+
+// Load data when page loads
+document.addEventListener('DOMContentLoaded', loadMultipleReleaseData);
+</script>
+{% endblock %}

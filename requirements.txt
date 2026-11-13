@@ -1,0 +1,29 @@
+# JIRA Release Planning Tool - Dependencies
+# Flask web framework
+Flask==2.3.3
+Flask-CORS==4.0.0
+
+# JIRA integration
+jira==3.5.0
+
+# Excel export functionality
+openpyxl==3.1.2
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Date/time handling
+python-dateutil==2.8.2
+
+# HTTP requests
+requests==2.31.0
+
+# Data processing
+pandas==2.0.3
+
+# Production servers
+gunicorn==21.2.0  # For Linux/Unix
+waitress==3.0.0   # For Windows
+
+# Development and debugging (optional)
+# Werkzeug==2.3.7
